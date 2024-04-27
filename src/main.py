@@ -1,53 +1,59 @@
+#1 - доступ разрешен, 0 - доступ запрещен
+permit = 1 
+
+# use prod in YC
+code_mode = 'prod'
+
 import os
 import json
 import ydb
 import ydb.iam
-import telebot
-from telebot.types import KeyboardButton
-from telebot import types
 import time
 import requests
 import json
+import telebot
+from telebot.types import KeyboardButton
+from telebot import types
+from static import *
 
-permit = 1 #1 - доступ разрешен, 0 - доступ запрещен
+if code_mode == 'dev':
+    from dotenv import load_dotenv
+    load_dotenv()
 
-ydb_endpoint=os.getenv('YDB_ENDPOINT')
-ydb_database=os.getenv('YDB_DATABASE')
+    ydb_endpoint=os.getenv('YDB_ENDPOINT')
+    ydb_database=os.getenv('YDB_DATABASE')
+    ydb_token=os.getenv('YDB_TOKEN')
 
-tg_token = os.getenv('TG_TOKEN')
+    gpt_token = os.getenv('GPT_TOKEN')
 
-gpt_token = ''
+    driver = ydb.Driver(endpoint=ydb_endpoint, database=ydb_database, credentials=ydb.AccessTokenCredentials(ydb_token))
 
-# Create driver in global space.
-driver = ydb.Driver(
-  endpoint=ydb_endpoint,
-  database=ydb_database,
-  credentials=ydb.iam.MetadataUrlCredentials() #use in YC
-)
+
+elif code_mode == 'prod':
+    ydb_endpoint=os.getenv('YDB_ENDPOINT')
+    ydb_database=os.getenv('YDB_DATABASE')
+
+    gpt_token = ''
+
+    driver = ydb.Driver(endpoint=ydb_endpoint,database=ydb_database, credentials=ydb.iam.MetadataUrlCredentials())
+
 # Wait for the driver to become active for requests.
 driver.wait(fail_fast=True, timeout=5)
 session = driver.table_client.session().create()
 
+founder_user_id = os.getenv('FOUNDER_USER_ID')
+
+cloud_id = os.getenv('CLOUD_ID')
+
+tg_token = os.getenv('TG_TOKEN')
+
 bot = telebot.TeleBot(tg_token)
-
-start_msg = 'нейросетевое умозаключение.\n' \
-        'максимальная температура.\n\n' \
-        'присоединяйся: @zhukov_tech'
-
-about_msg = 'нейросетевое умозаключение.\n\n' \
-        'используются технологии синтеза текста с максимальной температурой ответа на запрос. '\
-        'телом запроса (промта) является просьба предоставить необычное высказывание, сконфигурированное '\
-        'вариативно в каждом запросе.\n\nтемпературой в нейросетевом синтезе принято считать '\
-        'некое "лавирование" нейросети между консервативностью и разнообразием ответа.\n\n'\
-        'подробнее о работе бота можно прочитать здесь, присоединяйся: @zhukov_tech'
-
-error_msg = 'ведутся технические работы\n\nразработчик/по всем вопросам: @konstela\nподписывайся: @zhukov_tech'
-
 
 
 def gen_text():
+    mode_uri = f'gpt://{cloud_id}/yandexgpt-lite'
     prompt = {
-        "modelUri": "gpt://b1gah8egappp6q13pon0/yandexgpt-lite",
+        "modelUri": mode_uri,
         "completionOptions": {
             "stream": False,
             "temperature": 1,
@@ -122,7 +128,7 @@ def ydb_get_text(spot):
 def start_message(message):
     user_id = message.from_user.id
     if permit == 0:
-        if user_id != 321588402: #мне можно
+        if user_id != founder_user_id: #мне можно
             bot.send_message(user_id, error_msg)
     else:
         bot.send_message(user_id, start_msg, reply_markup=keyboard())
@@ -135,7 +141,7 @@ def start_message(message):
 def all_messages(message):
     user_id = message.from_user.id
     if permit == 0:
-        if user_id != xxx: #мне можно
+        if user_id != founder_user_id: #мне можно
             bot.send_message(user_id, error_msg)
             return
     if message.text == "gen":
@@ -150,12 +156,12 @@ def all_messages(message):
         bot.send_message(user_id, about_msg)
         return
     if message.text == 'real gen':
-        if user_id == 321588402: #мне можно
+        if user_id == founder_user_id: #мне можно
             text = gen_text()
             bot.send_message(user_id, text)
             return
     else:
-        if user_id == 321588402:
+        if user_id == founder_user_id:
             text = message.text
             ydb_update_text(text)
 
